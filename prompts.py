@@ -116,31 +116,6 @@ Next we add the house's right section:
     </s4>
 </strokes>
 
-Next we add the house's right section:
-<concept>House</concept>
-<strokes>
-    <s1>
-        <points>'x13y27', 'x24y27', 'x24y27', 'x24y11', 'x24y11', 'x13y11', 'x13y11', 'x13y27'</points>
-        <t_values>0.00,0.3,0.25,0.5,0.5,0.75,0.75,1.00</t_values>
-        <id>house base front rectangle</id>
-    </s1>
-    <s2>
-        <points>'x13y27', 'x18y37','x18y37', 'x24y27'</points>
-        <t_values>0.00,0.55,0.5,1.00</t_values>
-        <id>roof front triangle</id>
-    </s2>
-    <s3>
-        <points>'x24y27', 'x36y28', 'x36y28', 'x36y21', 'x36y21', 'x36y12', 'x36y12', 'x24y11'</points>
-        <t_values>0.00,0.3,0.25,0.5,0.5,0.75,0.75,1.00</t_values>
-        <id>house base right section</id>
-    </s3>
-    <s4>
-        <points>'x18y37', 'x30y38', 'x30y38', 'x36y28'</points>
-        <t_values>0.00,0.55,0.5,1.00</t_values>
-        <id>roof right section</id>
-    </s4>
-</strokes>
-
 Now that we have the general structure of the house, we can add details to it, like windows and a door:
 <concept>House</concept>
 <strokes>
