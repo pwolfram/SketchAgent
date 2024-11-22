@@ -1,36 +1,34 @@
 import argparse
-import utils
-import math
+import anthropic
 import ast
 import cairosvg
-import os
-from dotenv import load_dotenv
-import anthropic
-from prompts import sketch_first_prompt, idea_system_prompt, gt_example
 import json
+import os
+import utils
 import traceback
+
+from dotenv import load_dotenv
 from PIL import Image
+from prompts import sketch_first_prompt, system_prompt, gt_example
 
 
 def call_argparse():
     parser = argparse.ArgumentParser(description='Process Arguments')
     
     # General
-    parser.add_argument('--model', type=str, default='claude-3-5-sonnet-20240620', choices=['gpt-4-vision-preview', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini'])
-    parser.add_argument('--gen_mode', type=str, default='generation', choices=['generation', 'completion'])
-    parser.add_argument('--seed_mode', type=str, default='deterministic', choices=['deterministic', 'stochastic'])
     parser.add_argument('--concept_to_draw', type=str, default="cat")
-    
-    # save params
+    parser.add_argument('--seed_mode', type=str, default='deterministic', choices=['deterministic', 'stochastic'])
     parser.add_argument('--path2save', type=str, default=f"results/test/")
+    parser.add_argument('--model', type=str, default='claude-3-5-sonnet-20240620')
+    parser.add_argument('--gen_mode', type=str, default='generation', choices=['generation', 'completion'])
 
-    # grid params
-    parser.add_argument('--res', type=int, default=50, help="the resolution of the grid 50x50")
-    parser.add_argument('--cell_size', type=int, default=12, help="size of each cell on the grid")
+    # Grid params
+    parser.add_argument('--res', type=int, default=50, help="the resolution of the grid is set to 50x50")
+    parser.add_argument('--cell_size', type=int, default=12, help="size of each cell in the grid")
     parser.add_argument('--stroke_width', type=float, default=7.0)
-    parser.add_argument('--grid_size', type=int, default=600)
 
     args = parser.parse_args()
+    args.grid_size = (args.res + 1) * args.cell_size
 
     args.save_name = args.concept_to_draw.replace(" ", "_")
     args.path2save = f"{args.path2save}/{args.save_name}"
@@ -38,17 +36,16 @@ def call_argparse():
         os.makedirs(args.path2save)
         with open(f"{args.path2save}/experiment_log.json", 'w') as json_file:
             json.dump([], json_file, indent=4)
-    
     return args
 
 
 class SketchApp:
-    """
-    A Python class that manages the interactive drawing process.
-    This class should be used when a sketching session is initialized. Here, we keep track on the sketching history, and call our sketching agent to draw sequential strokes with the user.
-    """
     def __init__(self, args):
-        # grid info
+        # General
+        self.path2save = args.path2save
+        self.target_concept = args.concept_to_draw
+
+        # Grid related
         self.res = args.res
         self.num_cells = args.res
         self.cell_size = args.cell_size
@@ -57,12 +54,9 @@ class SketchApp:
         self.init_canvas_str = utils.image_to_str(self.init_canvas)
         self.cells_to_pixels_map = utils.cells_to_pixels(args.res, args.cell_size, header_size=args.cell_size)
 
-
-        # drawing params 
-        self.target_concept = args.concept_to_draw
+        # SVG related 
         self.stroke_width = args.stroke_width
-        self.path2save = args.path2save
-
+        
         # LLM Setup (you need to provide your ANTHROPIC_API_KEY in your .env file)
         self.cache = False
         self.max_tokens = 3000
@@ -142,16 +136,13 @@ class SketchApp:
             if prefill_msg:
                 other_msg = other_msg + [{"role": "assistant", "content": f"{prefill_msg}"}]
             
-            # in case of stroke by stroke generation
+        # In case of stroke by stroke generation
         if stop_sequences:
             additional_args["stop_sequences"]= [stop_sequences]
         else:
             additional_args["stop_sequences"]= ["</answer>"]
-
-        # Note that we deterministic settings for reproducibility (temperature=0.0 and top_k=1). 
-        # To run in stochastic mode just comment these parameters.
+ 
         response = self.call_llm(system_message, other_msg, additional_args)
-
         content = response.content[0].text
         
         if gen_mode == "completion":
@@ -175,7 +166,6 @@ class SketchApp:
             with open(f"{self.path2save}/experiment_log.json", 'w') as json_file:
                 json.dump(system_message_json + new_msg_history, json_file, indent=4)
             print(f"Data has been saved to [{self.path2save}/experiment_log.json]")
-
         return content
 
 
@@ -186,11 +176,11 @@ class SketchApp:
         add_args["stop_sequences"] = f"</answer>" 
 
         msg_history = []
-        init_canvas_str = None#self.init_canvas_str
+        init_canvas_str = None # self.init_canvas_str
 
         all_llm_output = self.get_response_from_llm(
             msg=self.input_prompt,
-            system_message=idea_system_prompt.format(res=self.res),
+            system_message=system_prompt.format(res=self.res),
             msg_history=msg_history,
             init_canvas_str=init_canvas_str,
             seed_mode=self.seed_mode,
@@ -216,23 +206,23 @@ class SketchApp:
         
 
     def generate_sketch(self):
-        stroke_pred = self.call_model_for_sketch_generation() # one stroke
-        # with open(f"{self.path2save}/experiment_log.json", 'w') as json_file:
-        #     experiment_log = json.load(json_file)[0]
-        #     stroke_pred = utils.get_strokes_text(experiment_log[-1]["content"][0]["text"])
-        model_strokes_svg = self.parse_model_to_svg(stroke_pred)
-        with open(f"{self.path2save}/output_{self.target_concept}.svg", "w") as svg_file:
+        sketching_commands = self.call_model_for_sketch_generation()
+        model_strokes_svg = self.parse_model_to_svg(sketching_commands)
+        # saved the SVG sketch
+        with open(f"{self.path2save}/{self.target_concept}.svg", "w") as svg_file:
             svg_file.write(model_strokes_svg)
 
-        # save the result as png on the canvas background 
-        output_png_path = f"{self.path2save}/output_{self.target_concept}_canvas.png"
-        cairosvg.svg2png(url=f"{self.path2save}/output_{self.target_concept}.svg", write_to=output_png_path)
+        # vector->pixel 
+        # save the sketch to png with blank backgournd
+        cairosvg.svg2png(url=f"{self.path2save}/{self.target_concept}.svg", write_to=f"{self.path2save}/{self.target_concept}.png", background_color="white")
+        
+        # save the sketch to png on the canvas
+        output_png_path = f"{self.path2save}/{self.target_concept}_canvas.png"
+        cairosvg.svg2png(url=f"{self.path2save}/{self.target_concept}.svg", write_to=output_png_path)
         foreground = Image.open(output_png_path)
         self.init_canvas.paste(Image.open(output_png_path), (0, 0), foreground) 
         self.init_canvas.save(output_png_path)
 
-        # save the result also without the canvas background
-        cairosvg.svg2png(url=f"{self.path2save}/output_{self.target_concept}.svg", write_to=f"{self.path2save}/output_{self.target_concept}.png", background_color="white")
         
 
 # Initialize and run the SketchApp
@@ -246,8 +236,3 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"An error has occurred: {e}")
             traceback.print_exc()
-    # try:
-    #     sketch_app.generate_sketch()
-    # except Exception as e:
-    #     print(f"An error has occurred: {e}")
-    #     traceback.print_exc()

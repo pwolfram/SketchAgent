@@ -1,14 +1,14 @@
 import xml.etree.ElementTree as ET
 import re
-import ast
 import numpy as np
-from IPython.display import SVG, display
 from PIL import Image, ImageDraw, ImageFont
-import math
 from io import BytesIO
 import base64
 
 
+# =========================
+# ===== Grid related ======
+# =========================
 def create_grid_image(res=50, cell_size=12, header_size=12):
     # Define the size of the grid
     rows = res
@@ -72,20 +72,10 @@ def create_grid_image(res=50, cell_size=12, header_size=12):
             text_x = (j + 1) * cell_size + (cell_size - text_width) / 2
             text_y = (i + 1) * cell_size + (cell_size - text_height) / 2
             
-            point_radius = 5
             center_y = int(img_height - cell_size - (i * cell_size) - cell_size / 2)
             center_x = int(j * cell_size + cell_size / 2 + cell_size)
-            point_radius = 2
             positions[text] = (center_x, center_y)
-
     return img, positions
-
-def image_to_str(image: Image):
-    buffer = BytesIO()
-    image.save(buffer, format="JPEG")
-    buffer.seek(0)
-    image = base64.b64encode(buffer.read()).decode('utf-8')
-    return image
 
 
 def cells_to_pixels(res=50, cell_size=12, header_size=12):
@@ -103,165 +93,38 @@ def cells_to_pixels(res=50, cell_size=12, header_size=12):
             # Calculate the position of the text
             text = f"x{j + 1}y{i + 1}"
             
-            point_radius = 5
             center_y = int(img_height - cell_size - (i * cell_size) - cell_size / 2)
             center_x = int(j * cell_size + cell_size / 2 + cell_size)
-            point_radius = 2
             positions[text] = (center_x, center_y)
 
     return positions
 
 
-def extract_svg_paths_with_control_points(svg_content):
-    """
-    Given an SVG code (containing svg tags, group tags, and paths), extracts a list of control points for each group.
-    Rturns a list of [{'group_id': 'id', 'paths':  [array([[x,y], [x,y]..]]), array([[x,y], [x,y]..]])]}]
-    """
-    # Parse the SVG content
-    root = ET.fromstring(svg_content)
-    
-    # A list to store the extracted control points and group ids
-    groups_with_paths = []
-    
-    # Iterate over all group elements in the SVG
-    for group in root.findall(".//{http://www.w3.org/2000/svg}g"):
-        group_id = group.get("id")
-        paths_in_group = []
-        
-        # Iterate over all path elements inside this group
-        for path in group.findall("{http://www.w3.org/2000/svg}path"):
-            d_attr = path.get("d")
-            
-            # Match the Move command (M), Cubic Bezier Curve (C), Quadratic Bezier (Q), and Line (L) commands
-            # 'M' Move to command (start point)
-            move_match = re.search(r'M\s*([-\d.]+)[,\s]+([-\d.]+)', d_attr)
-            if move_match:
-                start_x, start_y = map(float, move_match.groups())
-            
-            # 'C' Cubic Bezier Curve command (control points and end point)
-            curve_matches = re.findall(r'C\s*([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)', d_attr)
-            for match in curve_matches:
-                x1, y1, x2, y2, x, y = map(float, match)
-                points = [[start_x, start_y], [x1, y1], [x2, y2], [x, y]]
-            
-            # 'Q' Quadratic Bezier Curve command (control point and end point)
-            quadratic_matches = re.findall(r'Q\s*([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)', d_attr)
-            for match in quadratic_matches:
-                x1, y1, x, y = map(float, match)
-                points = [[start_x, start_y], [x1, y1], [x, y]]
-            
-            # 'L' Line command (end point)
-            line_matches = re.findall(r'L\s*([-\d.]+)[,\s]+([-\d.]+)', d_attr)
-            for match in line_matches:
-                x, y = map(float, match)
-                points= [[start_x, start_y], [x, y]]
-            
-            paths_in_group.append(np.array(points))
-        
-        # Append group id and its paths with control points to the list
-        groups_with_paths.append({'group_id': group_id, 'paths': paths_in_group})
-    
-    return groups_with_paths
-
 # =========================
-# ==== Bezier Sampling ====
+# ===== LLM related =======
 # =========================
-def cubic_bezier(P0, P1, P2, P3, t):
-    """Calculate a point in the cubic Bezier curve at parameter t."""
-    return (1 - t) ** 3 * P0 + 3 * (1 - t) ** 2 * t * P1 + 3 * (1 - t) * t ** 2 * P2 + t ** 3 * P3
-
-# Quadratic Bezier Curve with three control points
-def quadratic_bezier(P0, P1, P2, t):
-    """Calculate a point on the quadratic Bézier curve at parameter t."""
-    return (1 - t) ** 2 * P0 + 2 * (1 - t) * t * P1 + t ** 2 * P2
-
-# Linear Bezier Curve with two control points (a straight line)
-def linear_bezier(P0, P1, t):
-    """Calculate a point on the linear Bézier curve (line) at parameter t."""
-    return (1 - t) * P0 + t * P1
-
-# Constant Bézier Curve with one control point (a single point)
-def constant_bezier(P0, t):
-    """Return a constant point for a constant Bézier curve."""
-    return P0
-
-def sample_point(num_cp, points, t):
-    if num_cp == 4:
-        point = cubic_bezier(points[0], points[1], points[2], points[3], t)
-    elif num_cp == 3:
-        point = quadratic_bezier(points[0], points[1], points[2], t)
-    elif num_cp == 2:
-        point = linear_bezier(points[0], points[1], t)
-    elif num_cp == 1:
-        point = constant_bezier(points[0], t)
-    return point
+def image_to_str(image: Image):
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG")
+    buffer.seek(0)
+    image = base64.b64encode(buffer.read()).decode('utf-8')
+    return image
 
 
-def write_t_values(t_values_grid):
-    t_values_txt = f"<t_values>"
-    normalized_ts = []
-    min_time = min(t_values_grid)
-    max_time = max(t_values_grid)
-    for t in t_values_grid:
-        cur_n_t = (t - min_time) / (max_time - min_time) if max_time > min_time else 0.0
-        normalized_ts.append(float(f"{cur_n_t:.2f}"))
-        t_values_txt += f"{cur_n_t:.2f}, "
-    t_values_txt = t_values_txt[:-2]
-    t_values_txt += "</t_values>\n"
-    return t_values_txt
 
-
-def parse_xml_string_single_stroke(llm_output, res, stroke_counter):
-    strokes_start_marker = f"<s{stroke_counter}>"
-    strokes_end_marker = f"</s{stroke_counter}>"
-
-    # Find the start and end indices of the JSON string
-    start_index = llm_output.find(strokes_start_marker)
-    if start_index != -1:
-        # start_index += len(strokes_start_marker)  # Move past the marker
-        end_index = llm_output.find(strokes_end_marker, start_index)
-    else:
-        return None  # XML markers not found
-
-    if end_index == -1:
-        return None  # End marker not found
-
-    # Extract the JSON string
-    strokes_str = llm_output[start_index:end_index + len(strokes_end_marker)].strip()#[:-1]
-    xml_str = f"<wrap>{strokes_str}</wrap>"
-    # Parse the XML string
-    root = ET.fromstring(xml_str)
-    
-    # Initialize lists to hold strokes and t_values
-    # strokes_list = "[\n"
-    # t_values_list = "[\n"
-    
-    # Iterate over all the strokes
-    stroke = root.find(f"s{stroke_counter}")
-    points_text = stroke.find('points').text
-
-    # Extract t_values and convert them to float
-    t_values_text = stroke.find('t_values').text
-
-    # Append to the lists
-    strokes_list = f"[{points_text}]"
-    t_values_list = f"[{t_values_text}]"
-    
-    strokes_list = re.sub(r'\d+', lambda x: str(min(int(x.group()), res)), strokes_list)
-    strokes_list = re.sub(r'\d+', lambda x: str(max(int(x.group()), 1)), strokes_list)
-    
-    return strokes_list, t_values_list
-
+# =================================
+# ===== SVG process related =======
+# =================================
 def bezier_point(P, t):
     """Calculate a point on the Bézier curve for a given t."""
     return (1-t)**3 * P[0] + 3*(1-t)**2 * t * P[1] + 3*(1-t) * t**2 * P[2] + t**3 * P[3]
+
 
 def estimate_bezier_control_points_helper(sampled_points, t_values):
     n = len(sampled_points)
     
     if n == 1:
         # Linear interpolation: the control points are simply the two points
-        print("sampled_points[0]", sampled_points[0])
         P0 = np.array(sampled_points[0])
         P1 = np.array(sampled_points[0]).astype(np.float64) + 0.0001
         return np.array([P0, P1])
@@ -323,7 +186,6 @@ def estimate_bezier_control_points( sampled_points, t_values):
         error = np.mean(errors)
         
         if error > 5 and len(sampled_points) >= 7:
-            print(f"Fit error {error} is greater than tolerance. Splitting points and retrying...")
             mid = len(sampled_points) // 2
             left_sampled_points = sampled_points[:mid+1]
             right_sampled_points = sampled_points[mid:]
@@ -345,6 +207,7 @@ def estimate_bezier_control_points( sampled_points, t_values):
             return [P_left, P_right]
     return [P]
 
+
 def get_control_points(strokes_all, t_values_all, cells_to_pixels_map):
     net_points = []      
     for j in range(len(strokes_all)):
@@ -357,6 +220,7 @@ def get_control_points(strokes_all, t_values_all, cells_to_pixels_map):
         points_lst = estimate_bezier_control_points(sampled_points, t_values)
         net_points.append(points_lst)
     return net_points
+
 
 def get_control_points_single_stroke(strokes_all, t_values_all, cells_to_pixels_map):
     sampled_points = []
@@ -394,24 +258,6 @@ def create_svg_path_data(control_points):
     # Return the complete 'd' attribute string
     return path_data
 
-def get_stroke_color(stroke_counter):
-    if stroke_counter % 2 == 0:
-        return "red"
-    return "blue"
-
-def format_svg_single_stroke(group, dim, stroke_width, stroke_counter, stroke_color="black"):
-    # stroke_color = get_stroke_color(stroke_counter)
-    svg_width, svg_height = dim
-    sketch_text_svg = ""
-    # sketch_text_svg = f"""<svg width="{svg_width}" height="{svg_height}" xmlns="http://www.w3.org/2000/svg">\n"""        
-    gropu_text = f"""<g id="s{stroke_counter}" stroke="{stroke_color}" stroke-width="{stroke_width}" fill="none" stroke-linecap="round">\n"""
-    for sub_path_cp in group:  #sometimes 1 or 2 
-        path_data = create_svg_path_data(sub_path_cp)
-        gropu_text += f"""<path d="{path_data}"/>\n"""
-    gropu_text += "</g>\n"
-    sketch_text_svg += gropu_text
-    # sketch_text_svg += "</svg>"
-    return sketch_text_svg
 
 def format_svg(all_control_points, dim, stroke_width):
     svg_width, svg_height = dim
@@ -426,24 +272,16 @@ def format_svg(all_control_points, dim, stroke_width):
     sketch_text_svg += "</svg>"
     return sketch_text_svg
 
-def get_cur_stroke_text(stroke_counter, llm_output):
-    start_marker = f"<s{stroke_counter}>"
-    end_marker = f"</s{stroke_counter}>"
 
-    # Find the start and end indices of the JSON string
-    start_index = llm_output.find(start_marker)
-    if start_index != -1:
-        # start_index += len(strokes_start_marker)  # Move past the marker
-        end_index = llm_output.find(end_marker, start_index)
-    else:
-        return ""  # XML markers not found
-
-    if end_index == -1:
-        return ""  # End marker not found
-
-    # Extract the JSON string
-    strokes_str = llm_output[start_index:end_index + len(end_marker)].strip()#[:-1]
-    return strokes_str
+def format_svg_single_stroke(group, dim, stroke_width, stroke_counter, stroke_color="black"):
+    sketch_text_svg = ""      
+    gropu_text = f"""<g id="s{stroke_counter}" stroke="{stroke_color}" stroke-width="{stroke_width}" fill="none" stroke-linecap="round">\n"""
+    for sub_path_cp in group: 
+        path_data = create_svg_path_data(sub_path_cp)
+        gropu_text += f"""<path d="{path_data}"/>\n"""
+    gropu_text += "</g>\n"
+    sketch_text_svg += gropu_text
+    return sketch_text_svg
 
 
 # Note that this parse only the *first* part in the text in which you have the <strokes> </strokes> tags.
@@ -492,9 +330,10 @@ def parse_xml_string(llm_output, res):
     t_values_list += "]"
     return strokes_list, t_values_list
 
-def get_strokes_text(llm_output):
-    strokes_start_marker = "<strokes>"
-    strokes_end_marker = "</strokes>"
+
+def parse_xml_string_single_stroke(llm_output, res, stroke_counter):
+    strokes_start_marker = f"<s{stroke_counter}>"
+    strokes_end_marker = f"</s{stroke_counter}>"
 
     # Find the start and end indices of the JSON string
     start_index = llm_output.find(strokes_start_marker)
@@ -509,4 +348,22 @@ def get_strokes_text(llm_output):
 
     # Extract the JSON string
     strokes_str = llm_output[start_index:end_index + len(strokes_end_marker)].strip()#[:-1]
-    return strokes_str
+    xml_str = f"<wrap>{strokes_str}</wrap>"
+    # Parse the XML string
+    root = ET.fromstring(xml_str)
+    
+    # Iterate over all the strokes
+    stroke = root.find(f"s{stroke_counter}")
+    points_text = stroke.find('points').text
+
+    # Extract t_values and convert them to float
+    t_values_text = stroke.find('t_values').text
+
+    # Append to the lists
+    strokes_list = f"[{points_text}]"
+    t_values_list = f"[{t_values_text}]"
+    
+    strokes_list = re.sub(r'\d+', lambda x: str(min(int(x.group()), res)), strokes_list)
+    strokes_list = re.sub(r'\d+', lambda x: str(max(int(x.group()), 1)), strokes_list)
+    
+    return strokes_list, t_values_list
