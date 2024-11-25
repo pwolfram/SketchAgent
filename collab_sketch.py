@@ -79,15 +79,11 @@ class SketchApp:
         new_sketch_mode = data.get("mode", "solo")
         self.sketch_mode = new_sketch_mode
         self.init_canvas.save("static/init_canvas.png")
-        print("=====update mode!!", self.sketch_mode)
-        print("set sketch mode", self.sketch_mode)
         return jsonify({"status": "success", "message": f"Mode set to {self.sketch_mode}"})
 
 
     def setup_path2save(self):
-        print("self.sketch_mode setup_path2save", self.sketch_mode)
         folder_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        print("setup path2", self.sketch_mode)
         self.path2save = f"results/debug/{self.folder_name}_{self.session_id}/{self.target_concept}/{self.sketch_mode}_{folder_name}"
         if not os.path.exists(self.path2save):
             os.makedirs(self.path2save)
@@ -104,7 +100,6 @@ class SketchApp:
         self.init_canvas.save("static/cur_canvas_user.png")
         self.init_canvas.save("static/cur_canvas_agent.png")
         self.init_canvas.save("static/init_canvas.png")
-        print("self.sketch_mode", self.sketch_mode)
         if self.sketch_mode == "colab":
             self.init_thinking_tags()
             print("Thinking Ready!")
@@ -121,7 +116,6 @@ class SketchApp:
     
 
     def submit_sketch(self):
-        print("submit_sketch")
         self.all_strokes_svg += "</svg>"
         with open(f"{self.path2save}/final_sketch.svg", "w") as svg_file:
             svg_file.write(self.all_strokes_svg)
@@ -137,7 +131,6 @@ class SketchApp:
        
 
     def clear_canvas(self, same_session=True):
-        print("self.sketch_mode", self.sketch_mode)
         self.initialize_all()
         # delete current sketch from "static"
         self.init_canvas.save("static/cur_canvas_user.png")
@@ -166,9 +159,6 @@ class SketchApp:
             self.assitant_history = txt_update
         else:
             self.assitant_history += txt_update
-
-        print("==========history============")
-        print(self.assitant_history)
 
         # Load the existing JSON data
         with open(f"{self.path2save}/data_history.json", "r") as f:
@@ -419,14 +409,10 @@ class SketchApp:
 
         # first generate the thinking tags for both agents
         add_args["stop_sequences"] = f"<strokes>" 
-        # if not self.user_always_first: # in this case the agent draws the first stroke always!
-        #     self.stroke_counter += 1
-        #     add_args["stop_sequences"] = f"</s{self.stroke_counter}>" 
 
         msg_history = []
         init_canvas_str = None
         # init_canvas_str = self.init_canvas_str # in case we don't want to insert the empty canvas to the model
-        # assistant_suffix = f"<thinking>To sketch a recognizable {self.target_concept}, I'll focus on the key features of the {self.target_concept} and draw them step-by-step.</thinking> <concept>{self.target_concept}</concept>"
         
         assistant_suffix = self.get_response_from_llm(
             msg=self.input_prompt,
@@ -438,10 +424,6 @@ class SketchApp:
             **add_args
         )
 
-        # if not self.user_always_first:
-        #     assistant_suffix += f"</s{self.stroke_counter}>"
-        #     self.update_history(assistant_suffix)
-        # else:
         self.thinking_tags = assistant_suffix
         self.thinking_tags += "<strokes>"
         self.update_history(self.thinking_tags)
@@ -462,7 +444,6 @@ class SketchApp:
         init_canvas_str = None # in case we don't want to insert the empty canvas to the model
 
         print("Call LLM")
-        # assistant_suffix = "<thinking> fake </thinking> <concept>cat</concept>"
         all_sketch = self.get_response_from_llm(
             msg=self.input_prompt,
             system_message=system_prompt.format(res=self.res),
@@ -546,7 +527,6 @@ class SketchApp:
         msg_history = []
         init_canvas_str = None # in case we don't want to insert the empty canvas to the model
 
-        # all_llm_output = """<thinking>\nTo create a visually appealing sketch of a jellyfish, I'll break it down into the following parts:\n\n1. Bell (main body)\n2. Tentacles (multiple curved lines)\n3. Oral arms (shorter, frilly appendages)\n4. Inner details of the bell\n\nI'll start with the bell at the top of the grid, then add the tentacles hanging down, followed by the oral arms, and finally some inner details to give the jellyfish more character.\n\nFor the bell, I'll use a large, dome-shaped curve starting around x15y45 and ending around x35y45, with the highest point at x25y49.\n\nThe tentacles will be multiple curved lines starting from the bottom of the bell and extending downwards.\n\nThe oral arms will be shorter, more intricate curves near the center bottom of the bell.\n\nFinally, I'll add some inner details to the bell to give it more structure and realism.\n</thinking>\n\n<answer>\n<concept>Jellyfish</concept>\n<strokes>\n    <s1>\n        <points>'x15y45', 'x18y48', 'x25y49', 'x32y48', 'x35y45'</points>\n        <t_values>0.00, 0.25, 0.50, 0.75, 1.00</t_values>\n        <id>bell outline</id>\n    </s1>"""
         all_llm_output = self.get_response_from_llm(
             msg=self.input_prompt,
             system_message=system_prompt.format(res=res),
