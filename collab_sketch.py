@@ -84,7 +84,7 @@ class SketchApp:
 
     def setup_path2save(self):
         folder_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.path2save = f"results/debug/{self.folder_name}_{self.session_id}/{self.target_concept}/{self.sketch_mode}_{folder_name}"
+        self.path2save = f"results/collab_sketching/{self.folder_name}_{self.session_id}/{self.target_concept}/{self.sketch_mode}_{folder_name}"
         if not os.path.exists(self.path2save):
             os.makedirs(self.path2save)
         with open(f"{self.path2save}/data_history.json", "w") as f:
