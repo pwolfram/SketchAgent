@@ -367,3 +367,26 @@ def parse_xml_string_single_stroke(llm_output, res, stroke_counter):
     strokes_list = re.sub(r'\d+', lambda x: str(max(int(x.group()), 1)), strokes_list)
     
     return strokes_list, t_values_list
+
+
+# =====================================
+# ===== Collaborative Sketching =======
+# =====================================
+def get_cur_stroke_text(stroke_counter, llm_output):
+    start_marker = f"<s{stroke_counter}>"
+    end_marker = f"</s{stroke_counter}>"
+
+    # Find the start and end indices of the JSON string
+    start_index = llm_output.find(start_marker)
+    if start_index != -1:
+        # start_index += len(strokes_start_marker)  # Move past the marker
+        end_index = llm_output.find(end_marker, start_index)
+    else:
+        return ""  # XML markers not found
+
+    if end_index == -1:
+        return ""  # End marker not found
+
+    # Extract the JSON string
+    strokes_str = llm_output[start_index:end_index + len(end_marker)].strip()#[:-1]
+    return strokes_str
