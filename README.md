@@ -1,7 +1,7 @@
 
 # SketchAgent: Language-Driven Sequential Sketch Generation
 
-<a href=""><img src="https://img.shields.io/static/v1?label=Project&message=Website&color=blue"></a>
+<a href="https://yael-vinker.github.io/sketch-agent/"><img src="https://img.shields.io/static/v1?label=Project&message=Website&color=blue"></a>
 <a href=""><img src="https://img.shields.io/badge/arXiv-2311.13608-b31b1b.svg"></a>
 <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img src="https://img.shields.io/badge/License-Apache-yellow"></a>
 
@@ -68,6 +68,7 @@ This will launch a Flask-based web application. Once running, look for the follo
 Server running at: http://<your-ip-address>:5000
 ```
 Open the provided URL in your web browser to interact with the application. Results are saved to ```results/collab_sketching/```.
+Use the text box to change the concept to be drawn.
 
 
 ## Tips:
@@ -78,6 +79,7 @@ Open the provided URL in your web browser to interact with the application. Resu
 
 - [ ] Add support for chat based editing.
 - [ ] Add SVG drawing process animations in HTML.
+- [ ] Add support of other backbone models (GPT4o, LLama3).
 
 ## Citation
 If you find this useful for your research, please cite the following:
