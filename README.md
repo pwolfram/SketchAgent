@@ -54,7 +54,7 @@ python gen_sketch.py --concept_to_draw "sailboat"
 ```
 
 Optional arguments:
-* ```--seed_mode``` Default is ```"stochastic"```. Set to ```"deterministic"``` for reproducible results.
+* ```--seed_mode``` Default is ```"deterministic"``` for reproducible results. Set to ```"stochastic"``` for increased variability.
 * ```--path2save``` By default, results are saved to ```results/test/```.
 
 ## Collaborative Sketching
