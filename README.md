@@ -84,5 +84,13 @@ Use the text box to change the concept to be drawn.
 ## Citation
 If you find this useful for your research, please cite the following:
 ```bibtex
-
+@misc{vinker2024sketchagent,
+      title={SketchAgent: Language-Driven Sequential Sketch Generation}, 
+      author={Yael Vinker and Tamar Rott Shaham and Kristine Zheng and Alex Zhao and Judith E Fan and Antonio Torralba},
+      year={2024},
+      eprint={2411.17673},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2411.17673}, 
+}
 ```
