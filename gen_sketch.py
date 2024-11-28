@@ -1,35 +1,29 @@
 import argparse
-import anthropic
+import openai
 import ast
 import cairosvg
 import json
 import os
 import utils
 import traceback
-
 from dotenv import load_dotenv
 from PIL import Image
 from prompts import sketch_first_prompt, system_prompt, gt_example
 
-
 def call_argparse():
     parser = argparse.ArgumentParser(description='Process Arguments')
-    
     # General
     parser.add_argument('--concept_to_draw', type=str, default="cat")
     parser.add_argument('--seed_mode', type=str, default='deterministic', choices=['deterministic', 'stochastic'])
     parser.add_argument('--path2save', type=str, default=f"results/test/")
-    parser.add_argument('--model', type=str, default='claude-3-5-sonnet-20240620')
+    parser.add_argument('--model', type=str, default='gpt-4o')  # Updated to OpenAI's GPT model
     parser.add_argument('--gen_mode', type=str, default='generation', choices=['generation', 'completion'])
-
     # Grid params
     parser.add_argument('--res', type=int, default=50, help="the resolution of the grid is set to 50x50")
     parser.add_argument('--cell_size', type=int, default=12, help="size of each cell in the grid")
     parser.add_argument('--stroke_width', type=float, default=7.0)
-
     args = parser.parse_args()
     args.grid_size = (args.res + 1) * args.cell_size
-
     args.save_name = args.concept_to_draw.replace(" ", "_")
     args.path2save = f"{args.path2save}/{args.save_name}"
     if not os.path.exists(args.path2save):
@@ -38,13 +32,11 @@ def call_argparse():
             json.dump([], json_file, indent=4)
     return args
 
-
 class SketchApp:
     def __init__(self, args):
         # General
         self.path2save = args.path2save
         self.target_concept = args.concept_to_draw
-
         # Grid related
         self.res = args.res
         self.num_cells = args.res
@@ -53,121 +45,56 @@ class SketchApp:
         self.init_canvas, self.positions = utils.create_grid_image(res=args.res, cell_size=args.cell_size, header_size=args.cell_size)
         self.init_canvas_str = utils.image_to_str(self.init_canvas)
         self.cells_to_pixels_map = utils.cells_to_pixels(args.res, args.cell_size, header_size=args.cell_size)
-
-        # SVG related 
+        # SVG related
         self.stroke_width = args.stroke_width
-        
-        # LLM Setup (you need to provide your ANTHROPIC_API_KEY in your .env file)
-        self.cache = False
+        # LLM Setup (provide your OPENAI_API_KEY in your .env file)
         self.max_tokens = 3000
         load_dotenv()
-        claude_key = os.getenv("ANTHROPIC_API_KEY")
-        self.client = anthropic.Anthropic(api_key=claude_key)
+        openai.api_key = os.getenv("OPENAI_API_KEY")
         self.model = args.model
         self.input_prompt = sketch_first_prompt.format(concept=args.concept_to_draw, gt_sketches_str=gt_example)
         self.gen_mode = args.gen_mode
         self.seed_mode = args.seed_mode
-        
 
-    def call_llm(self, system_message, other_msg, additional_args):
-        if self.cache:
-            init_response = self.client.beta.prompt_caching.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    system=system_message,
-                    messages=other_msg,
-                    **additional_args
-                )
-        else:
-            init_response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    system=system_message,
-                    messages=other_msg,
-                    **additional_args
-                )
-        return init_response
+    def call_llm(self, messages, temperature=0.7):
+        """
+        Calls the OpenAI API with the given messages using the latest OpenAI Python library.
+        """
+        try:
+            response = openai.chat.completions.create(  # Updated API call
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=self.max_tokens,
+            )
+            return response.choices[0].message
+        except:
+            print(f"OpenAI API error")
+            raise
 
-    
     def define_input_to_llm(self, msg_history, init_canvas_str, msg):
-        # other_msg should contain all messgae without the system prompt
-        other_msg = msg_history 
-
-        content = []
-        # Claude best practice is image-then-text
+        # OpenAI's API expects a list of messages with roles
         if init_canvas_str is not None:
-            content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": init_canvas_str}}) 
+            msg_history.append({"role": "user", "content": f"[Image: {init_canvas_str}]"})
+        msg_history.append({"role": "user", "content": msg})
+        return msg_history
 
-        content.append({"type": "text", "text": msg})
-        if self.cache:
-            content[-1]["cache_control"] = {"type": "ephemeral"}
-
-        other_msg = other_msg + [{"role": "user", "content": content}]
-        return other_msg
-        
-
-    def get_response_from_llm(
-        self,
-        msg,
-        system_message,
-        msg_history=[],
-        init_canvas_str=None,
-        prefill_msg=None,
-        seed_mode="stochastic",
-        stop_sequences=None,
-        gen_mode="generation"
-    ):  
-        additional_args = {}
-        if seed_mode == "deterministic":
-            additional_args["temperature"] = 0.0
-            additional_args["top_k"] = 1
-
-        if self.cache:
-            system_message = [{
-                "type": "text",
-                "text": system_message,
-                "cache_control": {"type": "ephemeral"}
-            }]
-
-        # other_msg should contain all messgae without the system prompt
-        other_msg = self.define_input_to_llm(msg_history, init_canvas_str, msg) 
-
-        if gen_mode == "completion":
-            if prefill_msg:
-                other_msg = other_msg + [{"role": "assistant", "content": f"{prefill_msg}"}]
-            
-        # In case of stroke by stroke generation
-        if stop_sequences:
-            additional_args["stop_sequences"]= [stop_sequences]
-        else:
-            additional_args["stop_sequences"]= ["</answer>"]
- 
-        response = self.call_llm(system_message, other_msg, additional_args)
-        content = response.content[0].text
-        
-        if gen_mode == "completion":
-            other_msg = other_msg[:-1] # remove initial assistant prompt
-            content = f"{prefill_msg}{content}" 
-
-        # saves to json
+    def get_response_from_llm(self, msg, system_message, msg_history=[], init_canvas_str=None, prefill_msg=None, seed_mode="stochastic", stop_sequences=None, gen_mode="generation"):
+        temperature = 0.7 if seed_mode == "stochastic" else 0.0
+        msg_history = self.define_input_to_llm(msg_history, init_canvas_str, msg)
+        if gen_mode == "completion" and prefill_msg:
+            msg_history.append({"role": "assistant", "content": prefill_msg})
+        response_content = self.call_llm(msg_history, temperature=temperature)
+        # Save conversation history
         if self.path2save is not None:
-            system_message_json = [{"role": "system", "content": system_message}]
-            new_msg_history = other_msg + [
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": content,
-                        }
-                    ],
-                }
-            ]    
             with open(f"{self.path2save}/experiment_log.json", 'w') as json_file:
-                json.dump(system_message_json + new_msg_history, json_file, indent=4)
+                # Save only serializable content
+                serializable_msg_history = [
+                    {key: (value.to_dict_recursive() if hasattr(value, 'to_dict_recursive') else value) for key, value in msg.items()}
+                    for msg in msg_history]
+                json.dump(serializable_msg_history, json_file, indent=4)
             print(f"Data has been saved to [{self.path2save}/experiment_log.json]")
-        return content
-
+        return response_content
 
     def call_model_for_sketch_generation(self):
         print("Calling LLM...")
@@ -187,8 +114,7 @@ class SketchApp:
             gen_mode=self.gen_mode,
             **add_args
         )
-
-        all_llm_output += f"</answer>"
+        all_llm_output = str(all_llm_output) + f"</answer>"
         return all_llm_output
         
 
@@ -223,10 +149,7 @@ class SketchApp:
         self.init_canvas.paste(Image.open(output_png_path), (0, 0), foreground) 
         self.init_canvas.save(output_png_path)
 
-        
-
-# Initialize and run the SketchApp
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = call_argparse()
     sketch_app = SketchApp(args)
     for attempts in range(3):

@@ -3,16 +3,19 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - _libgcc_mutex=0.1
-  - _openmp_mutex=4.5
+#  - _libgcc_mutex=0.1
+#  - _openmp_mutex=4.5
   - bzip2=1.0.8
   - ca-certificates=2024.8.30
-  - ld_impl_linux-64=2.43
+#  - ld_impl_linux-64=2.43
+  - gfortran_impl_osx-arm64
   - libffi=3.4.2
-  - libgcc=14.2.0
-  - libgcc-ng=14.2.0
-  - libgomp=14.2.0
-  - libnsl=2.0.1
+  - libgcc-amzn2-aarch64
+  - llvm-openmp
+#  - libgcc=14.2.0
+#  - libgcc-ng=14.2.0
+#  - libgomp=14.2.0
+#  - libnsl=2.0.1
   - libsqlite=3.47.0
   - libuuid=2.38.1
   - libxcrypt=4.4.36
@@ -35,8 +38,10 @@ dependencies:
   - pip:
     - annotated-types==0.7.0
     - anthropic==0.36.0
+    - openai
     - anyio==4.5.2
     - blinker==1.8.2
+    - cairo
     - cairocffi==1.6.1
     - cairosvg==2.7.1
     - certifi==2024.8.30

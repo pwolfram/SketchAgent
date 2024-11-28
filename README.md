@@ -35,11 +35,12 @@ conda activate sketch_agent
 ```
 
 #### API Key
-This repository requires an Anthropic API key. If you don't have one, [create an Anthropic account](https://console.anthropic.com/login) and follow the instructions to obtain a key.
+This repository requires an Open API key. 
 
-Once you have the key, save it in the ```.env``` file:
+Once you have the key, save it to the conda environment
+via a one-liner:
 ```
-ANTHROPIC_API_KEY=<your_key>
+conda env sketch_agent vars set OPENAI_API_KEY=<your_key>
 ```
 
 # Start Sketching! :woman_artist: :art:
@@ -57,7 +58,7 @@ Optional arguments:
 * ```--seed_mode``` Default is ```"deterministic"``` for reproducible results. Set to ```"stochastic"``` for increased variability.
 * ```--path2save``` By default, results are saved to ```results/test/```.
 
-## Collaborative Sketching
+## Collaborative Sketching (not supported with openai currently)
 Collaborate with SketchAgent by alternating strokes! 
 To use the interactive interface:
 ```
