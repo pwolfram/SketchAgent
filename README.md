@@ -40,7 +40,7 @@ This repository requires an Open API key.
 Once you have the key, save it to the conda environment
 via a one-liner:
 ```
-conda env sketch_agent vars set OPENAI_API_KEY=<your_key>
+conda env config vars set OPENAI_API_KEY=<your_key>
 ```
 
 # Start Sketching! :woman_artist: :art:
